@@ -1,0 +1,21 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+COPY apps ./apps
+COPY internal ./internal
+
+RUN go build -o /out/worker ./apps/worker
+
+FROM alpine:3.22
+
+WORKDIR /app
+
+RUN apk add --no-cache python3 py3-pip ffmpeg \
+    && python3 -m pip install --no-cache-dir --break-system-packages --upgrade yt-dlp \
+    && addgroup -S app && adduser -S app -G app
+
+COPY --from=builder /out/worker /usr/local/bin/worker
+
+CMD ["worker"]

@@ -1,0 +1,81 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - web
+      - api
+    ports:
+      - "${EDGE_PORT:-80}:80"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      API_PORT: 8080
+      DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      DOWNLOAD_TTL_HOURS: ${DOWNLOAD_TTL_HOURS:-24}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      DOWNLOAD_TTL_HOURS: ${DOWNLOAD_TTL_HOURS:-24}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    volumes:
+      - job_data:/data/jobs
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ytvideos}
+      POSTGRES_USER: ${POSTGRES_USER:-ytvideos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ytvideos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../db/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  job_data:
