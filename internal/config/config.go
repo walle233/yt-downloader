@@ -19,6 +19,7 @@ type Config struct {
 	DownloadRoot       string
 	YTDLPCookiesFile   string
 	YTDLPJSRuntimes    string
+	YTDLPRemoteComponents string
 	DownloadTTLHours   int
 	WorkerConcurrency  int
 	WorkerPollInterval time.Duration
@@ -46,6 +47,7 @@ func Load() (Config, error) {
 		DownloadRoot:       getenv("DOWNLOAD_ROOT", "/data/jobs"),
 		YTDLPCookiesFile:   getenv("YTDLP_COOKIES_FILE", ""),
 		YTDLPJSRuntimes:    getenv("YTDLP_JS_RUNTIMES", "node"),
+		YTDLPRemoteComponents: getenv("YTDLP_REMOTE_COMPONENTS", "ejs:github"),
 		DownloadTTLHours:   getenvInt("DOWNLOAD_TTL_HOURS", 24),
 		WorkerConcurrency:  getenvInt("WORKER_CONCURRENCY", 2),
 		WorkerPollInterval: getenvDuration("WORKER_POLL_INTERVAL", 5*time.Second),

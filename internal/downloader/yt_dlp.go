@@ -18,13 +18,15 @@ type YTDLP struct {
 	downloadRoot string
 	cookiesFile  string
 	jsRuntimes   string
+	remoteComponents string
 }
 
-func New(downloadRoot, cookiesFile, jsRuntimes string) *YTDLP {
+func New(downloadRoot, cookiesFile, jsRuntimes, remoteComponents string) *YTDLP {
 	return &YTDLP{
 		downloadRoot: downloadRoot,
 		cookiesFile:  cookiesFile,
 		jsRuntimes:   jsRuntimes,
+		remoteComponents: remoteComponents,
 	}
 }
 
@@ -169,6 +171,9 @@ func (y *YTDLP) baseArgs() ([]string, func(), error) {
 
 	if y.jsRuntimes != "" {
 		args = append(args, "--js-runtimes", y.jsRuntimes)
+	}
+	if y.remoteComponents != "" {
+		args = append(args, "--remote-components", y.remoteComponents)
 	}
 	if y.cookiesFile != "" {
 		cookiesPath, cookiesCleanup, err := prepareCookiesFile(y.cookiesFile)

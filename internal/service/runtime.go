@@ -49,7 +49,7 @@ func NewRuntime(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		Config:     cfg,
 		Store:      db,
 		Queue:      redisQueue,
-		Downloader: downloader.New(cfg.DownloadRoot, cfg.YTDLPCookiesFile, cfg.YTDLPJSRuntimes),
+		Downloader: downloader.New(cfg.DownloadRoot, cfg.YTDLPCookiesFile, cfg.YTDLPJSRuntimes, cfg.YTDLPRemoteComponents),
 		Storage:    r2Storage,
 	}, nil
 }
