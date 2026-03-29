@@ -69,12 +69,14 @@ jobs:
           cd /opt/yt-downloader
 
           if [ ! -d .git ]; then
-            git clone git@github.com:walle233/yt-downloader.git .
+            git init
+            git remote add origin git@github.com:walle233/yt-downloader.git
           fi
 
           git fetch origin main
-          git checkout main
+          git checkout -B main origin/main
           git reset --hard ${GITHUB_SHA}
+          git clean -fd
 
           printf '%s' "${PROD_ENV_B64}" | base64 -d > .env
 
