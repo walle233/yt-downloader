@@ -3,10 +3,14 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	clerk "github.com/clerk/clerk-sdk-go/v2"
+	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
 
 	"github.com/walle233/yt-downloader/internal/config"
 	"github.com/walle233/yt-downloader/internal/model"
@@ -26,8 +30,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/healthz", s.handleHealthz)
 	mux.HandleFunc("/api/v1/videos/probe", s.handleProbeVideo)
-	mux.HandleFunc("/api/v1/downloads", s.handleCreateDownload)
-	mux.HandleFunc("/api/v1/downloads/", s.handleDownloadStatus)
+	mux.Handle("/api/v1/downloads", s.withAuthorization(http.HandlerFunc(s.handleDownloads)))
+	mux.Handle("/api/v1/downloads/", s.withAuthorization(http.HandlerFunc(s.handleDownloadStatus)))
 	return withCORS(withLogging(mux))
 }
 
@@ -76,23 +80,30 @@ func (s *Server) handleProbeVideo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, model.VideoProbeResponse{
-		VideoID:        probe.VideoID,
-		Title:          probe.Title,
-		DurationSec:    probe.DurationSec,
-		ThumbnailURL:   probe.ThumbnailURL,
-		AllowedFormats: []string{"source", "mp4"},
+		VideoID:      probe.VideoID,
+		Title:        probe.Title,
+		DurationSec:  probe.DurationSec,
+		ThumbnailURL: probe.ThumbnailURL,
+		Profiles:     probe.Profiles,
 	})
 }
 
-func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
+func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
 		s.handleListDownloads(w, r)
-		return
-	}
-
-	if r.Method != http.MethodPost {
+	case http.MethodPost:
+		s.handleCreateDownload(w, r)
+	default:
 		w.Header().Set("Allow", "GET, POST")
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
+	clerkUserID, ok := currentClerkUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 
@@ -107,30 +118,45 @@ func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.OutputFormat == "" {
-		req.OutputFormat = "mp4"
+	if _, ok := model.FindDownloadProfileSpec(model.DownloadProfileID(req.ProfileID)); !ok {
+		writeError(w, http.StatusBadRequest, "invalid download profile")
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
-	download, err := s.runtime.CreateDownload(ctx, req.URL, req.OutputFormat)
+	download, err := s.runtime.CreateDownload(ctx, clerkUserID, req.URL, model.DownloadProfileID(req.ProfileID))
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
+		switch {
+		case errors.Is(err, service.ErrProfileUnavailable):
+			writeError(w, http.StatusBadRequest, "requested download profile is not available for this video")
+			return
+		default:
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusAccepted, model.CreateDownloadResponse{
-		JobID:  download.JobID,
-		Status: download.Status,
+		JobID:     download.JobID,
+		Status:    download.Status,
+		ProfileID: download.ProfileID,
+		Message:   "Download queued successfully.",
 	})
 }
 
 func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
+	clerkUserID, ok := currentClerkUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	items, err := s.runtime.ListRecentDownloads(ctx, 20)
+	items, err := s.runtime.ListRecentDownloads(ctx, clerkUserID, 20)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -142,21 +168,29 @@ func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
 			JobID:        item.JobID,
 			Title:        item.Title,
 			Status:       item.Status,
-			OutputFormat: item.OutputFormat,
+			ProfileID:    item.ProfileID,
+			MediaKind:    item.MediaKind,
+			TargetHeight: item.TargetHeight,
 			FileName:     item.FileName,
 			ThumbnailURL: item.ThumbnailURL,
-			CreatedAt:    item.CreatedAt.Format(time.RFC3339),
+			CreatedAt:    item.CreatedAt.In(s.config.AppLocation).Format(time.RFC3339),
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items": response,
+	writeJSON(w, http.StatusOK, model.DownloadListResponse{
+		Items: response,
 	})
 }
 
 func (s *Server) handleDownloadStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	clerkUserID, ok := currentClerkUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 
@@ -171,18 +205,18 @@ func (s *Server) handleDownloadStatus(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
 
-		download, resultURL, err := s.runtime.GetResultURL(ctx, actualJobID)
+		download, resultURL, err := s.runtime.GetResultURL(ctx, clerkUserID, actualJobID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{
-			"jobId":       download.JobID,
-			"status":      download.Status,
-			"fileName":    download.FileName,
-			"fileSize":    download.FileSize,
-			"downloadUrl": resultURL,
+		writeJSON(w, http.StatusOK, model.DownloadResultResponse{
+			JobID:       download.JobID,
+			Status:      download.Status,
+			FileName:    download.FileName,
+			FileSize:    download.FileSize,
+			DownloadURL: resultURL,
 		})
 		return
 	}
@@ -190,19 +224,44 @@ func (s *Server) handleDownloadStatus(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	download, err := s.runtime.GetStatus(ctx, jobID)
+	download, err := s.runtime.GetStatus(ctx, clerkUserID, jobID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, model.DownloadStatusResponse{
-		JobID:    download.JobID,
-		Status:   download.Status,
-		Progress: download.Progress,
-		Step:     download.Step,
-		Message:  download.ErrorMessage,
+		JobID:        download.JobID,
+		Status:       download.Status,
+		Progress:     download.Progress,
+		Step:         download.Step,
+		Message:      download.ErrorMessage,
+		Title:        download.Title,
+		ThumbnailURL: download.ThumbnailURL,
+		DurationSec:  download.DurationSec,
+		ProfileID:    download.ProfileID,
+		MediaKind:    download.MediaKind,
+		TargetHeight: download.TargetHeight,
+		FileName:     download.FileName,
+		FileSize:     download.FileSize,
+		CreatedAt:    download.CreatedAt.In(s.config.AppLocation).Format(time.RFC3339),
 	})
+}
+
+func (s *Server) withAuthorization(next http.Handler) http.Handler {
+	return clerkhttp.WithHeaderAuthorization(
+		clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+		})),
+	)(next)
+}
+
+func currentClerkUserID(ctx context.Context) (string, bool) {
+	claims, ok := clerk.SessionClaimsFromContext(ctx)
+	if !ok || claims == nil || claims.Subject == "" {
+		return "", false
+	}
+	return claims.Subject, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

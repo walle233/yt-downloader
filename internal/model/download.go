@@ -6,12 +6,16 @@ type Download struct {
 	ID            int64      `json:"id"`
 	JobID         string     `json:"jobId"`
 	UserID        *int64     `json:"userId,omitempty"`
+	ClerkUserID   string     `json:"clerkUserId,omitempty"`
 	SourceURL     string     `json:"sourceUrl"`
 	SourceVideoID string     `json:"sourceVideoId"`
 	SourceSite    string     `json:"sourceSite"`
 	Title         string     `json:"title"`
 	Status        string     `json:"status"`
 	OutputFormat  string     `json:"outputFormat"`
+	ProfileID     string     `json:"profileId"`
+	MediaKind     string     `json:"mediaKind"`
+	TargetHeight  int        `json:"targetHeight,omitempty"`
 	Progress      int        `json:"progress"`
 	Step          string     `json:"step"`
 	ErrorCode     string     `json:"errorCode,omitempty"`
@@ -32,6 +36,7 @@ type ProbeResult struct {
 	Title        string
 	DurationSec  int
 	ThumbnailURL string
+	Profiles     []DownloadProfile
 }
 
 type DownloadArtifact struct {

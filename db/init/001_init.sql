@@ -10,12 +10,16 @@ create table if not exists users (
 create table if not exists downloads (
   id bigserial primary key,
   user_id bigint references users(id) on delete set null,
+  clerk_user_id text,
   source_url text not null,
   source_video_id text,
   source_site text not null default 'youtube',
   title text,
   status text not null,
   output_format text not null,
+  profile_id text,
+  media_kind text,
+  target_height integer,
   progress integer not null default 0,
   step text not null default 'queued',
   error_code text,
@@ -33,6 +37,8 @@ create table if not exists downloads (
 
 create index if not exists idx_downloads_status on downloads(status);
 create index if not exists idx_downloads_user_id on downloads(user_id);
+create index if not exists idx_downloads_clerk_user_id on downloads(clerk_user_id);
+create index if not exists idx_downloads_clerk_user_id_created_at on downloads(clerk_user_id, created_at desc);
 create index if not exists idx_downloads_source_video_id on downloads(source_video_id);
 
 create table if not exists video_meta_cache (

@@ -21,7 +21,13 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 		return nil, fmt.Errorf("new pgx pool: %w", err)
 	}
 
-	return &Store{pool: pool}, nil
+	store := &Store{pool: pool}
+	if err := store.ensureSchema(ctx); err != nil {
+		store.Close()
+		return nil, err
+	}
+
+	return store, nil
 }
 
 func (s *Store) Close() {
@@ -34,20 +40,37 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
 
-func (s *Store) CreateDownload(ctx context.Context, sourceURL, outputFormat string, probe model.ProbeResult) (model.Download, error) {
+func (s *Store) CreateDownload(ctx context.Context, clerkUserID string, spec model.DownloadProfileSpec, sourceURL string, probe model.ProbeResult) (model.Download, error) {
 	row := s.pool.QueryRow(ctx, `
 		insert into downloads (
-			source_url, source_video_id, source_site, title, status, output_format,
-			progress, step, duration_sec, thumbnail_url
+			clerk_user_id, source_url, source_video_id, source_site, title, status, output_format,
+			profile_id, media_kind, target_height, progress, step, duration_sec, thumbnail_url
 		)
-		values ($1, $2, 'youtube', $3, 'queued', $4, 0, 'queued', $5, $6)
-		returning id, source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
-			status, output_format, progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
+		values ($1, $2, $3, 'youtube', $4, 'queued', $5, $6, $7, $8, 0, 'queued', $9, $10)
+		returning id, coalesce(clerk_user_id, ''), source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
+			status, output_format, coalesce(profile_id, ''), coalesce(media_kind, ''), coalesce(target_height, 0),
+			progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
 			coalesce(duration_sec, 0), coalesce(file_name, ''), coalesce(file_ext, ''), coalesce(file_size, 0),
 			coalesce(r2_object_key, ''), coalesce(thumbnail_url, ''), created_at, updated_at, expires_at
-	`, sourceURL, probe.VideoID, probe.Title, outputFormat, probe.DurationSec, probe.ThumbnailURL)
+	`,
+		clerkUserID,
+		sourceURL,
+		probe.VideoID,
+		probe.Title,
+		spec.Container,
+		spec.ID,
+		spec.Kind,
+		nullableHeight(spec.TargetHeight),
+		probe.DurationSec,
+		probe.ThumbnailURL,
+	)
 
-	return scanDownload(row)
+	download, err := scanDownload(row)
+	if err != nil {
+		return model.Download{}, err
+	}
+
+	return download, nil
 }
 
 func (s *Store) GetDownloadByJobID(ctx context.Context, jobID string) (model.Download, error) {
@@ -57,8 +80,9 @@ func (s *Store) GetDownloadByJobID(ctx context.Context, jobID string) (model.Dow
 	}
 
 	row := s.pool.QueryRow(ctx, `
-		select id, source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
-			status, output_format, progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
+		select id, coalesce(clerk_user_id, ''), source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
+			status, output_format, coalesce(profile_id, ''), coalesce(media_kind, ''), coalesce(target_height, 0),
+			progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
 			coalesce(duration_sec, 0), coalesce(file_name, ''), coalesce(file_ext, ''), coalesce(file_size, 0),
 			coalesce(r2_object_key, ''), coalesce(thumbnail_url, ''), created_at, updated_at, expires_at
 		from downloads
@@ -70,13 +94,33 @@ func (s *Store) GetDownloadByJobID(ctx context.Context, jobID string) (model.Dow
 
 func (s *Store) GetDownloadByID(ctx context.Context, id int64) (model.Download, error) {
 	row := s.pool.QueryRow(ctx, `
-		select id, source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
-			status, output_format, progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
+		select id, coalesce(clerk_user_id, ''), source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
+			status, output_format, coalesce(profile_id, ''), coalesce(media_kind, ''), coalesce(target_height, 0),
+			progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
 			coalesce(duration_sec, 0), coalesce(file_name, ''), coalesce(file_ext, ''), coalesce(file_size, 0),
 			coalesce(r2_object_key, ''), coalesce(thumbnail_url, ''), created_at, updated_at, expires_at
 		from downloads
 		where id = $1
 	`, id)
+
+	return scanDownload(row)
+}
+
+func (s *Store) GetDownloadByJobIDForUser(ctx context.Context, clerkUserID, jobID string) (model.Download, error) {
+	id, err := parseJobID(jobID)
+	if err != nil {
+		return model.Download{}, err
+	}
+
+	row := s.pool.QueryRow(ctx, `
+		select id, coalesce(clerk_user_id, ''), source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
+			status, output_format, coalesce(profile_id, ''), coalesce(media_kind, ''), coalesce(target_height, 0),
+			progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
+			coalesce(duration_sec, 0), coalesce(file_name, ''), coalesce(file_ext, ''), coalesce(file_size, 0),
+			coalesce(r2_object_key, ''), coalesce(thumbnail_url, ''), created_at, updated_at, expires_at
+		from downloads
+		where id = $1 and clerk_user_id = $2
+	`, id, clerkUserID)
 
 	return scanDownload(row)
 }
@@ -116,16 +160,18 @@ func (s *Store) MarkCompleted(ctx context.Context, id int64, artifact model.Down
 	return err
 }
 
-func (s *Store) ListRecentDownloads(ctx context.Context, limit int) ([]model.Download, error) {
+func (s *Store) ListRecentDownloadsByUser(ctx context.Context, clerkUserID string, limit int) ([]model.Download, error) {
 	rows, err := s.pool.Query(ctx, `
-		select id, source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
-			status, output_format, progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
+		select id, coalesce(clerk_user_id, ''), source_url, coalesce(source_video_id, ''), source_site, coalesce(title, ''),
+			status, output_format, coalesce(profile_id, ''), coalesce(media_kind, ''), coalesce(target_height, 0),
+			progress, step, coalesce(error_code, ''), coalesce(error_message, ''),
 			coalesce(duration_sec, 0), coalesce(file_name, ''), coalesce(file_ext, ''), coalesce(file_size, 0),
 			coalesce(r2_object_key, ''), coalesce(thumbnail_url, ''), created_at, updated_at, expires_at
 		from downloads
+		where clerk_user_id = $1
 		order by created_at desc
-		limit $1
-	`, limit)
+		limit $2
+	`, clerkUserID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +189,24 @@ func (s *Store) ListRecentDownloads(ctx context.Context, limit int) ([]model.Dow
 	return items, rows.Err()
 }
 
+func (s *Store) ensureSchema(ctx context.Context) error {
+	statements := []string{
+		`alter table downloads add column if not exists clerk_user_id text`,
+		`alter table downloads add column if not exists profile_id text`,
+		`alter table downloads add column if not exists media_kind text`,
+		`alter table downloads add column if not exists target_height integer`,
+		`create index if not exists idx_downloads_clerk_user_id on downloads(clerk_user_id)`,
+		`create index if not exists idx_downloads_clerk_user_id_created_at on downloads(clerk_user_id, created_at desc)`,
+	}
+
+	for _, statement := range statements {
+		if _, err := s.pool.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("ensure schema: %w", err)
+		}
+	}
+	return nil
+}
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -151,12 +215,16 @@ func scanDownload(row rowScanner) (model.Download, error) {
 	var download model.Download
 	err := row.Scan(
 		&download.ID,
+		&download.ClerkUserID,
 		&download.SourceURL,
 		&download.SourceVideoID,
 		&download.SourceSite,
 		&download.Title,
 		&download.Status,
 		&download.OutputFormat,
+		&download.ProfileID,
+		&download.MediaKind,
+		&download.TargetHeight,
 		&download.Progress,
 		&download.Step,
 		&download.ErrorCode,
@@ -177,6 +245,13 @@ func scanDownload(row rowScanner) (model.Download, error) {
 
 	download.JobID = formatJobID(download.ID)
 	return download, nil
+}
+
+func nullableHeight(height int) any {
+	if height <= 0 {
+		return nil
+	}
+	return height
 }
 
 func formatJobID(id int64) string {

@@ -25,6 +25,10 @@ type Runtime struct {
 	Storage    *storage.R2Storage
 }
 
+var (
+	ErrProfileUnavailable = errors.New("requested download profile is not available")
+)
+
 func NewRuntime(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	db, err := store.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -68,13 +72,23 @@ func (r *Runtime) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) CreateDownload(ctx context.Context, url, outputFormat string) (model.Download, error) {
+func (r *Runtime) CreateDownload(ctx context.Context, clerkUserID, url string, profileID model.DownloadProfileID) (model.Download, error) {
 	probe, err := r.Downloader.Probe(ctx, url)
 	if err != nil {
 		return model.Download{}, err
 	}
 
-	download, err := r.Store.CreateDownload(ctx, url, outputFormat, probe)
+	profile, ok := model.FindAvailableProfile(probe.Profiles, profileID)
+	if !ok {
+		return model.Download{}, ErrProfileUnavailable
+	}
+
+	spec, ok := model.FindDownloadProfileSpec(profile.ID)
+	if !ok {
+		return model.Download{}, ErrProfileUnavailable
+	}
+
+	download, err := r.Store.CreateDownload(ctx, clerkUserID, spec, url, probe)
 	if err != nil {
 		return model.Download{}, err
 	}
@@ -86,12 +100,12 @@ func (r *Runtime) CreateDownload(ctx context.Context, url, outputFormat string) 
 	return download, nil
 }
 
-func (r *Runtime) GetStatus(ctx context.Context, jobID string) (model.Download, error) {
-	return r.Store.GetDownloadByJobID(ctx, jobID)
+func (r *Runtime) GetStatus(ctx context.Context, clerkUserID, jobID string) (model.Download, error) {
+	return r.Store.GetDownloadByJobIDForUser(ctx, clerkUserID, jobID)
 }
 
-func (r *Runtime) GetResultURL(ctx context.Context, jobID string) (model.Download, string, error) {
-	download, err := r.Store.GetDownloadByJobID(ctx, jobID)
+func (r *Runtime) GetResultURL(ctx context.Context, clerkUserID, jobID string) (model.Download, string, error) {
+	download, err := r.Store.GetDownloadByJobIDForUser(ctx, clerkUserID, jobID)
 	if err != nil {
 		return model.Download{}, "", err
 	}
@@ -107,8 +121,8 @@ func (r *Runtime) GetResultURL(ctx context.Context, jobID string) (model.Downloa
 	return download, url, nil
 }
 
-func (r *Runtime) ListRecentDownloads(ctx context.Context, limit int) ([]model.Download, error) {
-	return r.Store.ListRecentDownloads(ctx, limit)
+func (r *Runtime) ListRecentDownloads(ctx context.Context, clerkUserID string, limit int) ([]model.Download, error) {
+	return r.Store.ListRecentDownloadsByUser(ctx, clerkUserID, limit)
 }
 
 func (r *Runtime) RunWorker(ctx context.Context) error {

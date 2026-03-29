@@ -10,7 +10,10 @@ import (
 type Config struct {
 	AppEnv             string
 	AppDomain          string
+	AppTimezone        string
+	AppLocation        *time.Location
 	APIPort            string
+	ClerkSecretKey     string
 	DatabaseURL        string
 	RedisAddr          string
 	DownloadRoot       string
@@ -33,7 +36,9 @@ func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:             getenv("APP_ENV", "development"),
 		AppDomain:          getenv("APP_DOMAIN", "localhost"),
+		AppTimezone:        getenv("APP_TIMEZONE", "Asia/Shanghai"),
 		APIPort:            getenv("API_PORT", "8080"),
+		ClerkSecretKey:     getenv("CLERK_SECRET_KEY", ""),
 		DatabaseURL:        getenv("DATABASE_URL", "postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable"),
 		RedisAddr:          getenv("REDIS_ADDR", "redis:6379"),
 		DownloadRoot:       getenv("DOWNLOAD_ROOT", "/data/jobs"),
@@ -53,6 +58,12 @@ func Load() (Config, error) {
 	if cfg.APIPort == "" {
 		return Config{}, fmt.Errorf("API_PORT must not be empty")
 	}
+
+	location, err := loadLocation(cfg.AppTimezone)
+	if err != nil {
+		return Config{}, fmt.Errorf("load app timezone: %w", err)
+	}
+	cfg.AppLocation = location
 
 	return cfg, nil
 }
@@ -90,4 +101,18 @@ func getenvDuration(key string, fallback time.Duration) time.Duration {
 	}
 
 	return parsed
+}
+
+func loadLocation(name string) (*time.Location, error) {
+	location, err := time.LoadLocation(name)
+	if err == nil {
+		return location, nil
+	}
+
+	switch name {
+	case "Asia/Shanghai":
+		return time.FixedZone("Asia/Shanghai", 8*60*60), nil
+	default:
+		return nil, err
+	}
 }
