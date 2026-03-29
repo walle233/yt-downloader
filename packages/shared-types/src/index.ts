@@ -28,6 +28,25 @@ export interface CreateDownloadResponse {
   message?: string;
 }
 
+export interface BillingSummary {
+  plan: "free" | "pro";
+  subscriptionStatus: string;
+  freeDownloadsLimit: number;
+  freeDownloadsUsed: number;
+  freeDownloadsRemaining: number;
+  canDownload: boolean;
+}
+
+export interface BillingResponse {
+  billing: BillingSummary;
+}
+
+export interface FreeLimitErrorResponse {
+  error: string;
+  code: "free_limit_reached";
+  billing: BillingSummary;
+}
+
 export interface DownloadStatusResponse {
   jobId: string;
   status: string;

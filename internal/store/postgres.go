@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/walle233/yt-downloader/internal/model"
@@ -14,6 +16,8 @@ import (
 type Store struct {
 	pool *pgxpool.Pool
 }
+
+var ErrFreeLimitReached = errors.New("free download limit reached")
 
 func New(ctx context.Context, databaseURL string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -40,8 +44,27 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
 
-func (s *Store) CreateDownload(ctx context.Context, clerkUserID string, spec model.DownloadProfileSpec, sourceURL string, probe model.ProbeResult) (model.Download, error) {
-	row := s.pool.QueryRow(ctx, `
+func (s *Store) CreateDownload(ctx context.Context, clerkUserID string, spec model.DownloadProfileSpec, sourceURL string, probe model.ProbeResult) (model.Download, bool, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return model.Download{}, false, err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	account, err := ensureBillingAccountForUpdate(ctx, tx, clerkUserID)
+	if err != nil {
+		return model.Download{}, false, err
+	}
+
+	now := time.Now()
+	consumeFree := !account.IsProActive(now)
+	if consumeFree && account.FreeDownloadsUsed >= account.FreeDownloadsLimit {
+		return model.Download{}, false, ErrFreeLimitReached
+	}
+
+	row := tx.QueryRow(ctx, `
 		insert into downloads (
 			clerk_user_id, source_url, source_video_id, source_site, title, status, output_format,
 			profile_id, media_kind, target_height, progress, step, duration_sec, thumbnail_url
@@ -67,10 +90,84 @@ func (s *Store) CreateDownload(ctx context.Context, clerkUserID string, spec mod
 
 	download, err := scanDownload(row)
 	if err != nil {
-		return model.Download{}, err
+		return model.Download{}, false, err
 	}
 
-	return download, nil
+	if consumeFree {
+		if _, err := tx.Exec(ctx, `
+			update billing_accounts
+			set free_downloads_used = free_downloads_used + 1,
+				updated_at = now()
+			where clerk_user_id = $1
+		`, clerkUserID); err != nil {
+			return model.Download{}, false, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return model.Download{}, false, err
+	}
+
+	return download, consumeFree, nil
+}
+
+func (s *Store) RollbackCreatedDownload(ctx context.Context, clerkUserID string, downloadID int64, restoreFreeUsage bool) error {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	result, err := tx.Exec(ctx, `
+		delete from downloads
+		where id = $1 and clerk_user_id = $2 and status = 'queued'
+	`, downloadID, clerkUserID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("rollback created download: queued download not found")
+	}
+
+	if restoreFreeUsage {
+		if _, err := tx.Exec(ctx, `
+			update billing_accounts
+			set free_downloads_used = greatest(free_downloads_used - 1, 0),
+				updated_at = now()
+			where clerk_user_id = $1
+		`, clerkUserID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *Store) GetBillingAccount(ctx context.Context, clerkUserID string) (model.BillingAccount, error) {
+	if err := s.ensureBillingAccount(ctx, clerkUserID); err != nil {
+		return model.BillingAccount{}, err
+	}
+
+	row := s.pool.QueryRow(ctx, `
+		select clerk_user_id,
+			plan_code,
+			subscription_status,
+			coalesce(billing_interval, ''),
+			coalesce(stripe_customer_id, ''),
+			coalesce(stripe_subscription_id, ''),
+			current_period_end,
+			cancel_at_period_end,
+			free_downloads_limit,
+			free_downloads_used,
+			created_at,
+			updated_at
+		from billing_accounts
+		where clerk_user_id = $1
+	`, clerkUserID)
+
+	return scanBillingAccount(row)
 }
 
 func (s *Store) GetDownloadByJobID(ctx context.Context, jobID string) (model.Download, error) {
@@ -191,12 +288,36 @@ func (s *Store) ListRecentDownloadsByUser(ctx context.Context, clerkUserID strin
 
 func (s *Store) ensureSchema(ctx context.Context) error {
 	statements := []string{
+		`create table if not exists billing_accounts (
+			clerk_user_id text primary key,
+			plan_code text not null default 'free',
+			subscription_status text not null default 'inactive',
+			billing_interval text,
+			stripe_customer_id text,
+			stripe_subscription_id text,
+			current_period_end timestamptz,
+			cancel_at_period_end boolean not null default false,
+			free_downloads_limit integer not null default 3,
+			free_downloads_used integer not null default 0,
+			created_at timestamptz not null default now(),
+			updated_at timestamptz not null default now()
+		)`,
 		`alter table downloads add column if not exists clerk_user_id text`,
 		`alter table downloads add column if not exists profile_id text`,
 		`alter table downloads add column if not exists media_kind text`,
 		`alter table downloads add column if not exists target_height integer`,
+		`alter table billing_accounts add column if not exists plan_code text not null default 'free'`,
+		`alter table billing_accounts add column if not exists subscription_status text not null default 'inactive'`,
+		`alter table billing_accounts add column if not exists billing_interval text`,
+		`alter table billing_accounts add column if not exists stripe_customer_id text`,
+		`alter table billing_accounts add column if not exists stripe_subscription_id text`,
+		`alter table billing_accounts add column if not exists current_period_end timestamptz`,
+		`alter table billing_accounts add column if not exists cancel_at_period_end boolean not null default false`,
+		`alter table billing_accounts add column if not exists free_downloads_limit integer not null default 3`,
+		`alter table billing_accounts add column if not exists free_downloads_used integer not null default 0`,
 		`create index if not exists idx_downloads_clerk_user_id on downloads(clerk_user_id)`,
 		`create index if not exists idx_downloads_clerk_user_id_created_at on downloads(clerk_user_id, created_at desc)`,
+		`create index if not exists idx_billing_accounts_plan_code on billing_accounts(plan_code)`,
 	}
 
 	for _, statement := range statements {
@@ -252,6 +373,67 @@ func nullableHeight(height int) any {
 		return nil
 	}
 	return height
+}
+
+func (s *Store) ensureBillingAccount(ctx context.Context, clerkUserID string) error {
+	_, err := s.pool.Exec(ctx, `
+		insert into billing_accounts (clerk_user_id)
+		values ($1)
+		on conflict (clerk_user_id) do nothing
+	`, clerkUserID)
+	return err
+}
+
+func ensureBillingAccountForUpdate(ctx context.Context, tx pgx.Tx, clerkUserID string) (model.BillingAccount, error) {
+	if _, err := tx.Exec(ctx, `
+		insert into billing_accounts (clerk_user_id)
+		values ($1)
+		on conflict (clerk_user_id) do nothing
+	`, clerkUserID); err != nil {
+		return model.BillingAccount{}, err
+	}
+
+	row := tx.QueryRow(ctx, `
+		select clerk_user_id,
+			plan_code,
+			subscription_status,
+			coalesce(billing_interval, ''),
+			coalesce(stripe_customer_id, ''),
+			coalesce(stripe_subscription_id, ''),
+			current_period_end,
+			cancel_at_period_end,
+			free_downloads_limit,
+			free_downloads_used,
+			created_at,
+			updated_at
+		from billing_accounts
+		where clerk_user_id = $1
+		for update
+	`, clerkUserID)
+
+	return scanBillingAccount(row)
+}
+
+func scanBillingAccount(row rowScanner) (model.BillingAccount, error) {
+	var account model.BillingAccount
+	err := row.Scan(
+		&account.ClerkUserID,
+		&account.PlanCode,
+		&account.SubscriptionStatus,
+		&account.BillingInterval,
+		&account.StripeCustomerID,
+		&account.StripeSubscriptionID,
+		&account.CurrentPeriodEnd,
+		&account.CancelAtPeriodEnd,
+		&account.FreeDownloadsLimit,
+		&account.FreeDownloadsUsed,
+		&account.CreatedAt,
+		&account.UpdatedAt,
+	)
+	if err != nil {
+		return model.BillingAccount{}, err
+	}
+	return account, nil
 }
 
 func formatJobID(id int64) string {

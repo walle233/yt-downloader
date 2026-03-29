@@ -1,3 +1,5 @@
+import type { FreeLimitErrorResponse } from "@ytvd/shared-types";
+
 export const API_BASE = "/api/v1";
 
 export class APIError extends Error {
@@ -48,6 +50,10 @@ export async function authorizedRequestJSON<T>(path: string, getToken: () => Pro
       ...(init?.headers ?? {}),
     },
   });
+}
+
+export function isFreeLimitErrorResponse(data: unknown): data is FreeLimitErrorResponse {
+  return typeof data === "object" && data !== null && "code" in data && data.code === "free_limit_reached" && "billing" in data;
 }
 
 function safeParseJSON(raw: string): unknown {

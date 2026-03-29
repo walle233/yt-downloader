@@ -30,6 +30,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/healthz", s.handleHealthz)
 	mux.HandleFunc("/api/v1/videos/probe", s.handleProbeVideo)
+	mux.Handle("/api/v1/billing", s.withAuthorization(http.HandlerFunc(s.handleBilling)))
 	mux.Handle("/api/v1/downloads", s.withAuthorization(http.HandlerFunc(s.handleDownloads)))
 	mux.Handle("/api/v1/downloads/", s.withAuthorization(http.HandlerFunc(s.handleDownloadStatus)))
 	return withCORS(withLogging(mux))
@@ -100,6 +101,32 @@ func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleBilling(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	clerkUserID, ok := currentClerkUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	billing, err := s.runtime.GetBillingSummary(ctx, clerkUserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.BillingResponse{
+		Billing: billing,
+	})
+}
+
 func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 	clerkUserID, ok := currentClerkUserID(r.Context())
 	if !ok {
@@ -129,6 +156,18 @@ func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 	download, err := s.runtime.CreateDownload(ctx, clerkUserID, req.URL, model.DownloadProfileID(req.ProfileID))
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrFreeLimitReached):
+			billing, billingErr := s.runtime.GetBillingSummary(ctx, clerkUserID)
+			if billingErr != nil {
+				writeError(w, http.StatusPaymentRequired, "free download limit reached")
+				return
+			}
+			writeJSON(w, http.StatusPaymentRequired, model.FreeLimitErrorResponse{
+				Error:   "free download limit reached",
+				Code:    "free_limit_reached",
+				Billing: billing,
+			})
+			return
 		case errors.Is(err, service.ErrProfileUnavailable):
 			writeError(w, http.StatusBadRequest, "requested download profile is not available for this video")
 			return

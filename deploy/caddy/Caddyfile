@@ -1,4 +1,4 @@
-:80 {
+{$APP_DOMAIN:localhost}, www.{$APP_DOMAIN:localhost} {
   encode zstd gzip
 
   handle /api/* {
@@ -9,4 +9,3 @@
     reverse_proxy web:80
   }
 }
-

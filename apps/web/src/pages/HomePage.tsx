@@ -1,9 +1,26 @@
 import { Show, SignInButton, SignUpButton, useAuth, useClerk } from "@clerk/react";
-import type { CreateDownloadResponse, DownloadListItem, DownloadListResponse, DownloadProfile, ProbeResponse } from "@ytvd/shared-types";
+import type {
+  BillingResponse,
+  BillingSummary,
+  CreateDownloadResponse,
+  DownloadListItem,
+  DownloadListResponse,
+  DownloadProfile,
+  ProbeResponse,
+} from "@ytvd/shared-types";
 import { startTransition, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { APIError, authorizedRequestJSON, requestJSON } from "../lib/api";
+import { APIError, authorizedRequestJSON, isFreeLimitErrorResponse, requestJSON } from "../lib/api";
 import { formatBytes, formatDuration, groupProfiles, profileHeadline, profileSubline, sortProfiles, statusLabel } from "../lib/format";
+
+const DEFAULT_BILLING: BillingSummary = {
+  plan: "free",
+  subscriptionStatus: "inactive",
+  freeDownloadsLimit: 3,
+  freeDownloadsUsed: 0,
+  freeDownloadsRemaining: 3,
+  canDownload: true,
+};
 
 export function HomePage({ authEnabled }: { authEnabled: boolean }) {
   const navigate = useNavigate();
@@ -13,31 +30,44 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
   const [url, setURL] = useState("https://www.youtube.com/watch?v=fiVdZ3ZkIjw");
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
   const [history, setHistory] = useState<DownloadListItem[]>([]);
+  const [billing, setBilling] = useState<BillingSummary>(DEFAULT_BILLING);
   const [loadingProbe, setLoadingProbe] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [creatingProfileId, setCreatingProfileId] = useState<string | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isSignedIn) {
       setHistory([]);
+      setBilling(DEFAULT_BILLING);
+      setShowPaywall(false);
       return;
     }
-    void loadHistory();
-  }, [isSignedIn]);
+    void loadSignedInState();
+  }, [authEnabled, isSignedIn]);
 
-  const loadHistory = async () => {
+  const loadSignedInState = async () => {
     setLoadingHistory(true);
 
     try {
-      const data = await authorizedRequestJSON<DownloadListResponse>("/downloads", getToken);
+      const [downloadsData, billingData] = await Promise.all([
+        authorizedRequestJSON<DownloadListResponse>("/downloads", getToken),
+        authorizedRequestJSON<BillingResponse>("/billing", getToken),
+      ]);
       startTransition(() => {
-        setHistory(data.items);
+        setHistory(downloadsData.items);
+        setBilling(billingData.billing);
+        setShowPaywall(!billingData.billing.canDownload);
       });
     } catch (err) {
       if (err instanceof APIError && err.status === 401) {
-        startTransition(() => setHistory([]));
+        startTransition(() => {
+          setHistory([]);
+          setBilling(DEFAULT_BILLING);
+          setShowPaywall(false);
+        });
         return;
       }
       setError(err instanceof Error ? err.message : "Failed to load history");
@@ -57,7 +87,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
         body: JSON.stringify({ url }),
       });
       startTransition(() => setProbe({ ...data, profiles: sortProfiles(data.profiles) }));
-      setNotice("Review the available presets below. Sign in only when you are ready to create the download.");
+      setNotice("Review the available presets below. Sign in when you are ready to use one of your three free downloads.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to analyze the video");
     } finally {
@@ -80,6 +110,11 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
       });
       return;
     }
+    if (!billing.canDownload) {
+      setShowPaywall(true);
+      setNotice("Your three free downloads have been used. Subscription support is the next upgrade on the roadmap.");
+      return;
+    }
 
     setCreatingProfileId(profile.id);
     setError(null);
@@ -92,6 +127,15 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
       });
       navigate(`/downloads/${data.jobId}`);
     } catch (err) {
+      const errorData = err instanceof APIError ? err.data : undefined;
+      if (isFreeLimitErrorResponse(errorData)) {
+        startTransition(() => {
+          setBilling(errorData.billing);
+          setShowPaywall(true);
+        });
+        setNotice("You have used all three free downloads on this account. Billing support is the next upgrade and is not live yet.");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to create download");
     } finally {
       setCreatingProfileId(null);
@@ -112,7 +156,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
               Download YouTube video or audio with a clean, reliable flow.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-[#603e39]">
-              Analyze a link instantly, choose a preset that is actually available, and keep every completed file in your private library.
+              Analyze a link instantly, use up to three free downloads per account, and keep every completed file in your private library.
             </p>
           </div>
 
@@ -127,7 +171,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 shadow-sm">
               <span className="material-symbols-outlined text-[18px] text-[#bc0100]">shield_lock</span>
-              Sign in required to download
+              3 free downloads per account
             </div>
           </div>
 
@@ -179,8 +223,10 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
               <div className="grid gap-3 text-sm text-[#603e39] sm:grid-cols-3">
                 <div className="rounded-2xl bg-[#fcf9f8] px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#956d67]">Access</p>
-                  <p className="mt-1 font-display text-2xl font-extrabold tracking-[-0.04em]">Unlimited</p>
-                  <p className="text-xs">Downloads after sign-in</p>
+                  <p className="mt-1 font-display text-2xl font-extrabold tracking-[-0.04em]">{isSignedIn && billing.plan === "pro" && billing.canDownload ? "Pro" : isSignedIn ? billing.freeDownloadsRemaining : 3}</p>
+                  <p className="text-xs">
+                    {isSignedIn && billing.plan === "pro" && billing.canDownload ? "Active subscription" : isSignedIn ? "Free downloads left" : "Downloads after sign-in"}
+                  </p>
                 </div>
                 <div className="rounded-2xl bg-[#fcf9f8] px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#956d67]">Formats</p>
@@ -220,7 +266,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
                     <h3 className="mt-2 font-display text-3xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">Choose your output</h3>
                   </div>
                   <p className="text-sm leading-7 text-[#603e39]">
-                    Probe is public. Creating a real download is protected behind your account, with no daily cap once you are signed in.
+                    Probe is public. Creating a real download is protected behind your account and counts toward the three free downloads available on the free plan.
                   </p>
                   <div className="rounded-[1.5rem] bg-[#fcf9f8] p-4 text-sm text-[#603e39]">
                     <p className="font-semibold text-[#1c1b1b]">What is included</p>
@@ -239,6 +285,15 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
                       </li>
                     </ul>
                   </div>
+                  {showPaywall ? (
+                    <PaywallCard
+                      billing={billing}
+                      onDismiss={() => {
+                        setShowPaywall(false);
+                        setNotice("Subscription support is not live yet. You can still review your history and come back after the billing upgrade ships.");
+                      }}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -250,6 +305,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
                 profiles={groupedProfiles.video}
                 creatingProfileId={creatingProfileId}
                 isSignedIn={!!isSignedIn}
+                canDownload={billing.canDownload}
                 onCreate={handleCreate}
               />
               <ProfileGroup
@@ -258,6 +314,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
                 profiles={groupedProfiles.audio}
                 creatingProfileId={creatingProfileId}
                 isSignedIn={!!isSignedIn}
+                canDownload={billing.canDownload}
                 onCreate={handleCreate}
               />
             </div>
@@ -271,11 +328,11 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#956d67]">Private library</p>
             <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">Recent downloads</h2>
           </div>
-          {isSignedIn ? (
+              {isSignedIn ? (
             <button
               type="button"
               className="rounded-full border border-[#ebbbb4] bg-white px-4 py-2 text-sm font-semibold text-[#603e39] transition hover:border-[#bc0100] hover:text-[#bc0100]"
-              onClick={() => void loadHistory()}
+              onClick={() => void loadSignedInState()}
             >
               {loadingHistory ? "Refreshing..." : "Refresh"}
             </button>
@@ -287,7 +344,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
             <div className="max-w-2xl space-y-4">
               <h3 className="font-display text-3xl font-extrabold tracking-[-0.04em] text-[#1c1b1b]">Sign in to create downloads and keep history.</h3>
               <p className="text-[#603e39]">
-                Probe any YouTube link anonymously, but downloads, result links, and library history are protected behind your Clerk account.
+                Probe any YouTube link anonymously, then sign in to use your three free downloads and keep a private account-bound history.
               </p>
               <div className="flex flex-wrap gap-3">
                 <SignInButton mode="modal">
@@ -349,7 +406,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#956d67]">Support</p>
               <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">Built for clean, private personal use.</h2>
               <p className="mt-3 max-w-3xl text-[#603e39]">
-                Archive is focused on YouTube downloads with clear presets, account-bound history, and a clean sign-in flow for unlimited personal downloads.
+                Archive is focused on YouTube downloads with clear presets, account-bound history, three free downloads per account, and subscription support coming next.
               </p>
             </div>
             <div className="rounded-[1.5rem] bg-[#fcf9f8] px-5 py-4 text-sm text-[#603e39]">
@@ -367,12 +424,42 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
   );
 }
 
+function PaywallCard({ billing, onDismiss }: { billing: BillingSummary; onDismiss: () => void }) {
+  return (
+    <div className="rounded-[1.6rem] border border-[#ffdad6] bg-[#fff3f1] p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#930100]">Free plan limit reached</p>
+          <h4 className="mt-2 font-display text-2xl font-extrabold tracking-[-0.04em] text-[#1c1b1b]">Your free downloads are used up.</h4>
+        </div>
+        <button type="button" onClick={onDismiss} className="rounded-full border border-[#ebbbb4] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#603e39]">
+          Dismiss
+        </button>
+      </div>
+      <p className="mt-3 text-sm leading-7 text-[#6a3b34]">
+        You have used {billing.freeDownloadsUsed} of {billing.freeDownloadsLimit} free downloads on this account. Subscription support is the next feature on the roadmap, so there is no checkout flow yet.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link to="/support" className="inline-flex items-center gap-2 rounded-full bg-[#bc0100] px-4 py-3 text-sm font-semibold text-white">
+          <span className="material-symbols-outlined text-[18px]">help</span>
+          Read the support guide
+        </Link>
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#ebbbb4] bg-white px-4 py-3 text-sm font-semibold text-[#603e39]">
+          <span className="material-symbols-outlined text-[18px]">hourglass_top</span>
+          Subscription coming soon
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ProfileGroup({
   title,
   subtitle,
   profiles,
   creatingProfileId,
   isSignedIn,
+  canDownload,
   onCreate,
 }: {
   title: string;
@@ -380,6 +467,7 @@ function ProfileGroup({
   profiles: DownloadProfile[];
   creatingProfileId: string | null;
   isSignedIn: boolean;
+  canDownload: boolean;
   onCreate: (profile: DownloadProfile) => Promise<void>;
 }) {
   if (profiles.length === 0) {
@@ -422,7 +510,7 @@ function ProfileGroup({
               </div>
               <div className="text-right">
                 <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${profile.available ? "bg-[#fff1ef] text-[#bc0100]" : "bg-[#ebe7e7] text-[#7d7674]"}`}>
-                  {profile.available ? (isSignedIn ? (isBusy ? "Creating" : "Download") : "Sign in") : "Unavailable"}
+                  {profile.available ? (isSignedIn ? (canDownload ? (isBusy ? "Creating" : "Download") : "Limit reached") : "Sign in") : "Unavailable"}
                 </span>
               </div>
             </button>

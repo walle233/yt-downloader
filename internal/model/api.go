@@ -30,6 +30,25 @@ type CreateDownloadResponse struct {
 	Message   string `json:"message,omitempty"`
 }
 
+type BillingSummary struct {
+	Plan                   string `json:"plan"`
+	SubscriptionStatus     string `json:"subscriptionStatus"`
+	FreeDownloadsLimit     int    `json:"freeDownloadsLimit"`
+	FreeDownloadsUsed      int    `json:"freeDownloadsUsed"`
+	FreeDownloadsRemaining int    `json:"freeDownloadsRemaining"`
+	CanDownload            bool   `json:"canDownload"`
+}
+
+type BillingResponse struct {
+	Billing BillingSummary `json:"billing"`
+}
+
+type FreeLimitErrorResponse struct {
+	Error   string         `json:"error"`
+	Code    string         `json:"code"`
+	Billing BillingSummary `json:"billing"`
+}
+
 type DownloadStatusResponse struct {
 	JobID        string `json:"jobId"`
 	Status       string `json:"status"`

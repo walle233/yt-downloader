@@ -18,7 +18,7 @@ const FAQ_ITEMS = [
   {
     question: "Is Archive free to use?",
     answer:
-      "Yes. The current product flow is free to use. You can probe YouTube links anonymously, and once signed in you can create downloads without a daily cap.",
+      "Yes. The current product flow includes anonymous probe and three free downloads per signed-in account. Subscription support is planned next, but it is not live yet.",
   },
   {
     question: "What links are supported right now?",
@@ -34,6 +34,11 @@ const FAQ_ITEMS = [
     question: "Do I need to sign in before downloading?",
     answer:
       "Yes. Probing a link is public, but creating a download, viewing job details, opening result links, and accessing history all require sign-in.",
+  },
+  {
+    question: "What happens after the three free downloads?",
+    answer:
+      "Once the three free downloads are used, the app will stop creating new download jobs on that account. The product will show a paywall-style notice, but checkout is not live in this version yet.",
   },
   {
     question: "How is my data handled?",
@@ -81,6 +86,7 @@ export function SupportPage() {
           <div className="absolute -bottom-6 -left-2 max-w-xs rounded-[1.8rem] border border-[#ebbbb4]/40 bg-white px-6 py-5 shadow-[0_18px_36px_rgba(28,27,27,0.08)] sm:-left-6">
             <p className="font-display text-lg font-bold tracking-[-0.03em] text-[#1c1b1b]">Current product scope</p>
             <p className="mt-2 text-sm leading-6 text-[#603e39]">YouTube links, sign-in protected downloads, private history, fixed MP4 presets, and audio-only MP3.</p>
+            <p className="mt-2 text-sm leading-6 text-[#603e39]">Each signed-in account currently includes three free downloads before the upcoming subscription layer.</p>
           </div>
         </div>
       </section>
@@ -96,7 +102,7 @@ export function SupportPage() {
               <p>Archive removes the usual downloader clutter and narrows the experience to a few predictable choices that match common personal-use needs.</p>
               <p>
                 Instead of exposing every raw media variant, the app probes the video, shows only the presets that are truly available, and keeps completed jobs
-                in a private history tied to your account.
+                in a private history tied to your account, with a simple free plan before billing launches.
               </p>
             </div>
           </div>

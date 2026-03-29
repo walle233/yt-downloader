@@ -27,6 +27,7 @@ type Runtime struct {
 
 var (
 	ErrProfileUnavailable = errors.New("requested download profile is not available")
+	ErrFreeLimitReached   = store.ErrFreeLimitReached
 )
 
 func NewRuntime(ctx context.Context, cfg config.Config) (*Runtime, error) {
@@ -88,12 +89,16 @@ func (r *Runtime) CreateDownload(ctx context.Context, clerkUserID, url string, p
 		return model.Download{}, ErrProfileUnavailable
 	}
 
-	download, err := r.Store.CreateDownload(ctx, clerkUserID, spec, url, probe)
+	download, consumedFree, err := r.Store.CreateDownload(ctx, clerkUserID, spec, url, probe)
 	if err != nil {
 		return model.Download{}, err
 	}
 
 	if err := r.Queue.EnqueueDownload(ctx, download.ID); err != nil {
+		rollbackErr := r.Store.RollbackCreatedDownload(ctx, clerkUserID, download.ID, consumedFree)
+		if rollbackErr != nil {
+			fmt.Printf("rollback created download failed: job=%s err=%v\n", download.JobID, rollbackErr)
+		}
 		return model.Download{}, err
 	}
 
@@ -123,6 +128,15 @@ func (r *Runtime) GetResultURL(ctx context.Context, clerkUserID, jobID string) (
 
 func (r *Runtime) ListRecentDownloads(ctx context.Context, clerkUserID string, limit int) ([]model.Download, error) {
 	return r.Store.ListRecentDownloadsByUser(ctx, clerkUserID, limit)
+}
+
+func (r *Runtime) GetBillingSummary(ctx context.Context, clerkUserID string) (model.BillingSummary, error) {
+	account, err := r.Store.GetBillingAccount(ctx, clerkUserID)
+	if err != nil {
+		return model.BillingSummary{}, err
+	}
+
+	return account.ToSummary(time.Now()), nil
 }
 
 func (r *Runtime) RunWorker(ctx context.Context) error {

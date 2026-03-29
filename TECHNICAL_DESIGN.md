@@ -9,7 +9,7 @@
 - 前端：`Vite + React`
 - 部署：`Docker Compose`
 - 运行环境：`VPS`
-- 外层入口：`Cloudflare proxy`
+- 域名入口：自定义域名
 - 数据库：`PostgreSQL`
 - 队列/缓存：`Redis`
 - 对象存储：`Cloudflare R2`
@@ -20,6 +20,7 @@
 - 下载、转码、上传全部异步执行。
 - 兼顾可维护性、可扩展性和部署简单度。
 - 优先支持自用、内部工具或仅处理用户有权下载的内容。
+- 当前产品口径为“登录后每账号 3 次免费下载”。
 
 ## 2. 总体结论
 
@@ -38,7 +39,7 @@
 - 提交单个 YouTube 视频 URL
 - 探测视频元信息
 - 创建下载任务
-- 下载原始文件或转为兼容 `mp4`
+- 下载固定产品规格：`MP4 360p / 480p / 720p / 1080p + audio-mp3`
 - 查询任务状态
 - 下载已完成文件
 - 文件过期后自动清理
@@ -49,13 +50,14 @@
 - 频道批量抓取
 - 会员内容或登录态内容
 - 多站点下载
-- 匿名无限制使用
+- 匿名下载
+- 免费用户无限制使用已取消，当前产品改为登录后每账号 3 次免费
 
 ## 4. 高层架构
 
 ```mermaid
 flowchart LR
-    U["用户浏览器"] --> CF["Cloudflare Proxy"]
+    U["用户浏览器"] --> CF["Cloudflare DNS / Proxy"]
     CF --> FE["frontend (Vite/React 静态站点)"]
     CF --> API["api (Go)"]
     API --> PG["PostgreSQL"]
@@ -71,7 +73,7 @@ flowchart LR
 
 流量入口：
 
-- `Cloudflare -> VPS`
+- `your-domain.example -> Cloudflare -> VPS`
 
 服务组成：
 
@@ -225,15 +227,12 @@ R2 用于：
 
 ### 6.7 反向代理与入口
 
-- 域名入口走 `Cloudflare proxy`
-- VPS 上建议用 `Caddy` 或 `Nginx` 作为本机入口反代
+- 站点主域名：`https://your-domain.example`
+- `www.your-domain.example` 可选做别名
+- VPS 上使用 `Caddy` 作为本机入口反代
+- Cloudflare 托管 DNS，并在源站证书签发后切为 `Full (strict)`
 
-推荐路由：
-
-- `app.example.com` -> `frontend`
-- `api.example.com` -> `api`
-
-也可以单域名：
+当前固定路由：
 
 - `/` -> `frontend`
 - `/api/*` -> `api`
@@ -366,7 +365,10 @@ MVP 建议：
   "title": "What Makes White Tea So Different?",
   "durationSec": 197,
   "thumbnailUrl": "https://...",
-  "allowedFormats": ["source", "mp4"]
+  "profiles": [
+    {"id": "video-720p", "kind": "video", "container": "mp4", "available": true},
+    {"id": "audio-mp3", "kind": "audio", "container": "mp3", "available": true}
+  ]
 }
 ```
 
@@ -379,7 +381,7 @@ MVP 建议：
 ```json
 {
   "url": "https://www.youtube.com/watch?v=fiVdZ3ZkIjw",
-  "outputFormat": "mp4"
+  "profileId": "video-720p"
 }
 ```
 
@@ -565,7 +567,7 @@ downloads/2026/03/job_123/video.mp4
 
 ### 12.1 Cloudflare 层
 
-- 域名开启 `Cloudflare proxy`
+- 域名在切换为代理前，先用 `DNS only` 完成源站证书签发
 - `SSL/TLS` 使用 `Full (strict)`
 - 使用 `Origin CA`
 - 建议开启 `Authenticated Origin Pulls`
@@ -641,7 +643,7 @@ downloads/2026/03/job_123/video.mp4
 - 登录用户提交单个 YouTube URL
 - 视频元信息预览
 - 创建下载任务
-- 输出原始文件或兼容 `mp4`
+- 输出固定规格 `MP4 360p / 480p / 720p / 1080p + audio-mp3`
 - 任务状态轮询
 - 成功后返回 R2 下载链接
 - 文件 24 小时自动过期
@@ -650,7 +652,7 @@ downloads/2026/03/job_123/video.mp4
 
 - 播放列表
 - 批量任务
-- 匿名使用
+- 匿名下载
 - 支付
 - 多站点
 
@@ -666,7 +668,7 @@ downloads/2026/03/job_123/video.mp4
 - 对象存储：`Cloudflare R2`
 - 部署：`Docker Compose`
 - 运行环境：`VPS`
-- 外层入口：`Cloudflare proxy`
+- 域名入口：自定义域名
 
 这是一个很稳的组合：
 

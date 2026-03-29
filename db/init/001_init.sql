@@ -7,6 +7,21 @@ create table if not exists users (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists billing_accounts (
+  clerk_user_id text primary key,
+  plan_code text not null default 'free',
+  subscription_status text not null default 'inactive',
+  billing_interval text,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  free_downloads_limit integer not null default 3,
+  free_downloads_used integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists downloads (
   id bigserial primary key,
   user_id bigint references users(id) on delete set null,
@@ -40,6 +55,7 @@ create index if not exists idx_downloads_user_id on downloads(user_id);
 create index if not exists idx_downloads_clerk_user_id on downloads(clerk_user_id);
 create index if not exists idx_downloads_clerk_user_id_created_at on downloads(clerk_user_id, created_at desc);
 create index if not exists idx_downloads_source_video_id on downloads(source_video_id);
+create index if not exists idx_billing_accounts_plan_code on billing_accounts(plan_code);
 
 create table if not exists video_meta_cache (
   source_video_id text primary key,
