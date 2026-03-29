@@ -27,7 +27,7 @@ function AppShell({ authEnabled, children }: { authEnabled: boolean; children: R
             </div>
             <div>
               <Link to="/" className="font-display text-2xl font-extrabold tracking-[-0.04em] text-[#bc0100]">
-                Archive
+                YTDownloader
               </Link>
               <p className="text-xs uppercase tracking-[0.28em] text-[#956d67]">YouTube Downloader</p>
             </div>

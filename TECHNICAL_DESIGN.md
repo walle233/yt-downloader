@@ -353,7 +353,7 @@ MVP 建议：
 
 ```json
 {
-  "url": "https://www.youtube.com/watch?v=fiVdZ3ZkIjw"
+  "url": "https://www.youtube.com/watch?v=2zda1Tr4big"
 }
 ```
 
@@ -361,7 +361,7 @@ MVP 建议：
 
 ```json
 {
-  "videoId": "fiVdZ3ZkIjw",
+  "videoId": "2zda1Tr4big",
   "title": "What Makes White Tea So Different?",
   "durationSec": 197,
   "thumbnailUrl": "https://...",
@@ -380,7 +380,7 @@ MVP 建议：
 
 ```json
 {
-  "url": "https://www.youtube.com/watch?v=fiVdZ3ZkIjw",
+  "url": "https://www.youtube.com/watch?v=2zda1Tr4big",
   "profileId": "video-720p"
 }
 ```

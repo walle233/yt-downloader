@@ -10,13 +10,13 @@ const PURPOSE_POINTS = [
   {
     icon: "video_settings",
     title: "Clear presets",
-    body: "Archive focuses on fixed presets instead of raw format lists, so you can choose quickly and predict the output.",
+    body: "YTDownloader focuses on fixed presets instead of raw format lists, so you can choose quickly and predict the output.",
   },
 ] as const;
 
 const FAQ_ITEMS = [
   {
-    question: "Is Archive free to use?",
+    question: "Is YTDownloader free to use?",
     answer:
       "Yes. The current product flow includes anonymous probe and three free downloads per signed-in account. Subscription support is planned next, but it is not live yet.",
   },
@@ -28,7 +28,7 @@ const FAQ_ITEMS = [
   {
     question: "What download formats are available?",
     answer:
-      "Archive currently offers MP4 presets in 360p, 480p, 720p, and 1080p, plus an audio-only MP3 option when the source supports it.",
+      "YTDownloader currently offers MP4 presets in 360p, 480p, 720p, and 1080p, plus an audio-only MP3 option when the source supports it.",
   },
   {
     question: "Do I need to sign in before downloading?",
@@ -57,12 +57,12 @@ export function SupportPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[#bc0100]">The Curator&apos;s Guide</p>
           <div className="space-y-5">
             <h1 className="font-display max-w-4xl text-5xl font-extrabold tracking-[-0.06em] text-[#1c1b1b] sm:text-6xl md:text-7xl">
-              Archive support,
+              YTDownloader support,
               <br />
               product truth, and FAQ.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-[#603e39]">
-              Archive is built to make YouTube downloading feel intentional instead of cluttered. This page explains what the product supports today, how the
+              YTDownloader is built to make YouTube downloading feel intentional instead of cluttered. This page explains what the product supports today, how the
               sign-in flow works, and what to expect from the download process.
             </p>
           </div>
@@ -95,11 +95,11 @@ export function SupportPage() {
         <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div className="space-y-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#956d67]">About Archive</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#956d67]">About YTDownloader</p>
               <h2 className="mt-2 font-display text-4xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">A cleaner product layer on top of a familiar task.</h2>
             </div>
             <div className="space-y-5 text-lg leading-8 text-[#603e39]">
-              <p>Archive removes the usual downloader clutter and narrows the experience to a few predictable choices that match common personal-use needs.</p>
+              <p>YTDownloader removes the usual downloader clutter and narrows the experience to a few predictable choices that match common personal-use needs.</p>
               <p>
                 Instead of exposing every raw media variant, the app probes the video, shows only the presets that are truly available, and keeps completed jobs
                 in a private history tied to your account, with a simple free plan before billing launches.

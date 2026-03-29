@@ -204,7 +204,7 @@ function GateCard({ title, body, action }: { title: string; body: string; action
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-5xl items-center px-4 py-12 sm:px-6">
       <div className="w-full rounded-[2rem] border border-white/80 bg-white/88 p-8 shadow-[0_18px_44px_rgba(28,27,27,0.07)] sm:p-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#956d67]">Archive</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#956d67]">YTDownloader</p>
         <h1 className="mt-3 font-display text-4xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">{title}</h1>
         <p className="mt-4 max-w-2xl text-lg leading-8 text-[#603e39]">{body}</p>
         {action ? <div className="mt-8">{action}</div> : null}

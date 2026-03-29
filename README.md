@@ -1,6 +1,6 @@
-# Archive
+# YTDownloader
 
-`Archive` 是一个面向 YouTube 的下载产品 monorepo。
+`YTDownloader` 是一个面向 YouTube 的下载产品 monorepo。
 
 当前版本已经具备完整的探测、登录、创建下载、任务详情和历史记录流程，并包含基础的免费计划限制：
 

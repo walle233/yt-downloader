@@ -28,7 +28,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
   const { getToken, isSignedIn } = useAuth();
   const { openSignIn } = useClerk();
 
-  const [url, setURL] = useState("https://www.youtube.com/watch?v=fiVdZ3ZkIjw");
+  const [url, setURL] = useState("https://www.youtube.com/watch?v=2zda1Tr4big");
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
   const [history, setHistory] = useState<DownloadListItem[]>([]);
   const [billing, setBilling] = useState<BillingSummary>(DEFAULT_BILLING);
@@ -442,7 +442,7 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#956d67]">Support</p>
               <h2 className="mt-2 font-display text-3xl font-extrabold tracking-[-0.05em] text-[#1c1b1b]">Built for clean, private personal use.</h2>
               <p className="mt-3 max-w-3xl text-[#603e39]">
-                Archive is focused on YouTube downloads with clear presets, account-bound history, three free downloads per account, and subscription support coming next.
+                YTDownloader is focused on YouTube downloads with clear presets, account-bound history, three free downloads per account, and subscription support coming next.
               </p>
             </div>
             <div className="rounded-[1.5rem] bg-[#fcf9f8] px-5 py-4 text-sm text-[#603e39]">
