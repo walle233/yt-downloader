@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { trackEvent } from "./lib/analytics";
 import { DownloadPage } from "./pages/DownloadPage";
 import { HomePage } from "./pages/HomePage";
 import { SupportPage } from "./pages/SupportPage";
+import { RouteAnalytics } from "./components/RouteAnalytics";
 
 interface AppProps {
   authEnabled?: boolean;
@@ -54,12 +56,20 @@ function AppShell({ authEnabled, children }: { authEnabled: boolean; children: R
               <>
                 <Show when="signed-out">
                   <SignInButton mode="modal">
-                    <button type="button" className="rounded-full border border-[#ebbbb4] bg-white px-4 py-2 text-sm font-semibold text-[#603e39] transition hover:border-[#bc0100] hover:text-[#bc0100]">
+                    <button
+                      type="button"
+                      onClick={() => trackEvent("sign_in_click", { source: "header" })}
+                      className="rounded-full border border-[#ebbbb4] bg-white px-4 py-2 text-sm font-semibold text-[#603e39] transition hover:border-[#bc0100] hover:text-[#bc0100]"
+                    >
                       Sign in
                     </button>
                   </SignInButton>
                   <SignUpButton mode="modal">
-                    <button type="button" className="rounded-full bg-[#bc0100] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(188,1,0,0.18)] transition hover:scale-[0.98]">
+                    <button
+                      type="button"
+                      onClick={() => trackEvent("sign_up_click", { source: "header" })}
+                      className="rounded-full bg-[#bc0100] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(188,1,0,0.18)] transition hover:scale-[0.98]"
+                    >
                       Create account
                     </button>
                   </SignUpButton>
@@ -111,6 +121,7 @@ export default function App({ authEnabled = true }: AppProps) {
   return (
     <BrowserRouter>
       <AppShell authEnabled={authEnabled}>
+        <RouteAnalytics />
         <Routes>
           <Route path="/" element={<HomePage authEnabled={authEnabled} />} />
           <Route path="/support" element={<SupportPage />} />

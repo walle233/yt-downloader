@@ -11,6 +11,7 @@ import type {
 import { startTransition, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { APIError, authorizedRequestJSON, isFreeLimitErrorResponse, requestJSON } from "../lib/api";
+import { trackEvent } from "../lib/analytics";
 import { formatBytes, formatDuration, groupProfiles, profileHeadline, profileSubline, sortProfiles, statusLabel } from "../lib/format";
 
 const DEFAULT_BILLING: BillingSummary = {
@@ -80,6 +81,10 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
     setLoadingProbe(true);
     setError(null);
     setNotice(null);
+    trackEvent("probe_submit", {
+      signed_in: !!isSignedIn,
+      url_host: safeURLHost(url),
+    });
 
     try {
       const data = await requestJSON<ProbeResponse>("/videos/probe", {
@@ -87,8 +92,16 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
         body: JSON.stringify({ url }),
       });
       startTransition(() => setProbe({ ...data, profiles: sortProfiles(data.profiles) }));
+      trackEvent("probe_success", {
+        video_profiles: data.profiles.filter((profile) => profile.kind === "video" && profile.available).length,
+        audio_profiles: data.profiles.filter((profile) => profile.kind === "audio" && profile.available).length,
+      });
       setNotice("Review the available presets below. Sign in when you are ready to use one of your three free downloads.");
     } catch (err) {
+      trackEvent("probe_failed", {
+        signed_in: !!isSignedIn,
+        message: err instanceof Error ? err.message.slice(0, 120) : "unknown_error",
+      });
       setError(err instanceof Error ? err.message : "Failed to analyze the video");
     } finally {
       setLoadingProbe(false);
@@ -99,11 +112,17 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
     if (!profile.available) {
       return;
     }
+    trackEvent("download_preset_click", {
+      profile_id: profile.id,
+      media_kind: profile.kind,
+      signed_in: !!isSignedIn,
+    });
     if (!authEnabled) {
       setError("Clerk is not configured in this environment.");
       return;
     }
     if (!isSignedIn) {
+      trackEvent("sign_in_click", { source: "preset_gate", profile_id: profile.id });
       await openSignIn({
         afterSignInUrl: window.location.href,
         afterSignUpUrl: window.location.href,
@@ -125,6 +144,10 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
         method: "POST",
         body: JSON.stringify({ url, profileId: profile.id }),
       });
+      trackEvent("download_created", {
+        profile_id: profile.id,
+        media_kind: profile.kind,
+      });
       navigate(`/downloads/${data.jobId}`);
     } catch (err) {
       const errorData = err instanceof APIError ? err.data : undefined;
@@ -136,6 +159,11 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
         setNotice("You have used all three free downloads on this account. Billing support is the next upgrade and is not live yet.");
         return;
       }
+      trackEvent("download_create_failed", {
+        profile_id: profile.id,
+        media_kind: profile.kind,
+        message: err instanceof Error ? err.message.slice(0, 120) : "unknown_error",
+      });
       setError(err instanceof Error ? err.message : "Failed to create download");
     } finally {
       setCreatingProfileId(null);
@@ -178,13 +206,21 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
           <Show when="signed-out">
             <div className="flex flex-wrap gap-3">
               <SignInButton mode="modal">
-                <button type="button" className="inline-flex items-center gap-2 rounded-full bg-[#bc0100] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(188,1,0,0.2)] transition hover:scale-[0.98]">
+                <button
+                  type="button"
+                  onClick={() => trackEvent("sign_in_click", { source: "hero" })}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#bc0100] px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(188,1,0,0.2)] transition hover:scale-[0.98]"
+                >
                   <span className="material-symbols-outlined text-[18px]">login</span>
                   Sign in to unlock downloads
                 </button>
               </SignInButton>
               <SignUpButton mode="modal">
-                <button type="button" className="inline-flex items-center gap-2 rounded-full border border-[#ebbbb4] bg-white px-5 py-3 text-sm font-semibold text-[#603e39] transition hover:border-[#bc0100] hover:text-[#bc0100]">
+                <button
+                  type="button"
+                  onClick={() => trackEvent("sign_up_click", { source: "hero" })}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#ebbbb4] bg-white px-5 py-3 text-sm font-semibold text-[#603e39] transition hover:border-[#bc0100] hover:text-[#bc0100]"
+                >
                   <span className="material-symbols-outlined text-[18px]">person_add</span>
                   Create free account
                 </button>
@@ -348,12 +384,12 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
               </p>
               <div className="flex flex-wrap gap-3">
                 <SignInButton mode="modal">
-                  <button type="button" className="rounded-full bg-[#bc0100] px-5 py-3 text-sm font-semibold text-white">
+                  <button type="button" onClick={() => trackEvent("sign_in_click", { source: "history_gate" })} className="rounded-full bg-[#bc0100] px-5 py-3 text-sm font-semibold text-white">
                     Sign in
                   </button>
                 </SignInButton>
                 <SignUpButton mode="modal">
-                  <button type="button" className="rounded-full border border-[#ebbbb4] bg-white px-5 py-3 text-sm font-semibold text-[#603e39]">
+                  <button type="button" onClick={() => trackEvent("sign_up_click", { source: "history_gate" })} className="rounded-full border border-[#ebbbb4] bg-white px-5 py-3 text-sm font-semibold text-[#603e39]">
                     Create free account
                   </button>
                 </SignUpButton>
@@ -422,6 +458,14 @@ export function HomePage({ authEnabled }: { authEnabled: boolean }) {
       </section>
     </main>
   );
+}
+
+function safeURLHost(value: string) {
+  try {
+    return new URL(value).host;
+  } catch {
+    return "invalid_url";
+  }
 }
 
 function PaywallCard({ billing, onDismiss }: { billing: BillingSummary; onDismiss: () => void }) {

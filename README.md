@@ -64,6 +64,7 @@ cp .env.example .env
 
 - `APP_DOMAIN`：站点域名，本地默认 `localhost`，生产环境填写你自己的正式域名
 - `VITE_CLERK_PUBLISHABLE_KEY`：前端 Clerk publishable key
+- `VITE_GA_MEASUREMENT_ID`：前端 GA4 Measurement ID，例如 `G-XXXXXXXXXX`
 - `CLERK_SECRET_KEY`：后端校验 Clerk session token
 - `DATABASE_URL`：Postgres 连接串
 - `REDIS_ADDR`：Redis 地址
@@ -87,6 +88,8 @@ docker compose -f deploy/compose/docker-compose.yml up -d --build
 - `/`：首页，包含 URL 输入、可用规格探测、剩余额度和最近下载
 - `/downloads/:jobId`：下载详情页，显示任务状态和结果链接
 - `/support`：FAQ / About / 产品说明页
+
+GA4 接入后，前端会自动发送基础 `page_view`，并上报探测、登录、下载创建与下载链接打开等关键事件。
 
 ## API 概览
 

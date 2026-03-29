@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { SignInButton, useAuth } from "@clerk/react";
 import type { DownloadResultResponse, DownloadStatusResponse } from "@ytvd/shared-types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { APIError, authorizedRequestJSON } from "../lib/api";
+import { trackEvent } from "../lib/analytics";
 import { formatBytes, formatDuration, profileHeadline, profileSubline, statusLabel } from "../lib/format";
 
 export function DownloadPage({ authEnabled }: { authEnabled: boolean }) {
@@ -14,6 +15,11 @@ export function DownloadPage({ authEnabled }: { authEnabled: boolean }) {
   const [result, setResult] = useState<DownloadResultResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasTrackedReadyRef = useRef(false);
+
+  useEffect(() => {
+    hasTrackedReadyRef.current = false;
+  }, [jobId]);
 
   useEffect(() => {
     if (!jobId || !authEnabled || !isSignedIn) {
@@ -36,6 +42,13 @@ export function DownloadPage({ authEnabled }: { authEnabled: boolean }) {
           const resultData = await authorizedRequestJSON<DownloadResultResponse>(`/downloads/${jobId}/result`, getToken);
           if (!cancelled) {
             setResult(resultData);
+            if (!hasTrackedReadyRef.current) {
+              trackEvent("download_result_ready", {
+                profile_id: statusData.profileId,
+                media_kind: statusData.mediaKind,
+              });
+              hasTrackedReadyRef.current = true;
+            }
           }
         }
       } catch (err) {
@@ -150,6 +163,12 @@ export function DownloadPage({ authEnabled }: { authEnabled: boolean }) {
                   </p>
                 </div>
                 <a
+                  onClick={() =>
+                    trackEvent("download_link_open", {
+                      profile_id: status.profileId,
+                      media_kind: status.mediaKind,
+                    })
+                  }
                   className="inline-flex w-full items-center justify-center gap-2 rounded-[1.2rem] bg-[#bc0100] px-6 py-4 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-[0_18px_38px_rgba(188,1,0,0.22)] transition hover:scale-[0.99]"
                   href={result.downloadUrl}
                   target="_blank"
