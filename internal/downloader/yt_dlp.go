@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -59,14 +60,16 @@ func (y *YTDLP) Probe(ctx context.Context, url string) (model.ProbeResult, error
 	args := append([]string{"--dump-single-json"}, baseArgs...)
 	args = append(args, url)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
-	output, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
-		return model.ProbeResult{}, fmt.Errorf("yt-dlp probe: %w; output=%s", err, strings.TrimSpace(string(output)))
+		return model.ProbeResult{}, fmt.Errorf("yt-dlp probe: %w; stderr=%s", err, strings.TrimSpace(stderr.String()))
 	}
 
 	var data probeOutput
 	if err := json.Unmarshal(output, &data); err != nil {
-		return model.ProbeResult{}, fmt.Errorf("decode probe output: %w", err)
+		return model.ProbeResult{}, fmt.Errorf("decode probe output: %w; stdout=%s; stderr=%s", err, strings.TrimSpace(string(output)), strings.TrimSpace(stderr.String()))
 	}
 
 	return model.ProbeResult{
