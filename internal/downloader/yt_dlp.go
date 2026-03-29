@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,7 +48,13 @@ type probeFormat struct {
 }
 
 func (y *YTDLP) Probe(ctx context.Context, url string) (model.ProbeResult, error) {
-	args := append([]string{"--dump-single-json"}, y.baseArgs()...)
+	baseArgs, cleanup, err := y.baseArgs()
+	if err != nil {
+		return model.ProbeResult{}, err
+	}
+	defer cleanup()
+
+	args := append([]string{"--dump-single-json"}, baseArgs...)
 	args = append(args, url)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 	output, err := cmd.CombinedOutput()
@@ -82,7 +89,13 @@ func (y *YTDLP) Download(ctx context.Context, job model.Download) (model.Downloa
 		return model.DownloadArtifact{}, fmt.Errorf("unsupported download profile: %s", job.ProfileID)
 	}
 
-	args := append(y.baseArgs(), "-o", outputTemplate)
+	baseArgs, cleanup, err := y.baseArgs()
+	if err != nil {
+		return model.DownloadArtifact{}, err
+	}
+	defer cleanup()
+
+	args := append(baseArgs, "-o", outputTemplate)
 	switch spec.Kind {
 	case "audio":
 		args = append(args, "-f", "bestaudio")
@@ -150,17 +163,66 @@ func (y *YTDLP) Download(ctx context.Context, job model.Download) (model.Downloa
 	}, nil
 }
 
-func (y *YTDLP) baseArgs() []string {
+func (y *YTDLP) baseArgs() ([]string, func(), error) {
 	args := []string{"--no-playlist"}
+	cleanup := func() {}
+
 	if y.jsRuntimes != "" {
 		args = append(args, "--js-runtimes", y.jsRuntimes)
 	}
 	if y.cookiesFile != "" {
-		if info, err := os.Stat(y.cookiesFile); err == nil && !info.IsDir() {
-			args = append(args, "--cookies", y.cookiesFile)
+		cookiesPath, cookiesCleanup, err := prepareCookiesFile(y.cookiesFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("prepare yt-dlp cookies file: %w", err)
+		}
+		if cookiesPath != "" {
+			cleanup = cookiesCleanup
+			args = append(args, "--cookies", cookiesPath)
 		}
 	}
-	return args
+	return args, cleanup, nil
+}
+
+func prepareCookiesFile(sourcePath string) (string, func(), error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", func() {}, nil
+		}
+		return "", nil, err
+	}
+	if info.IsDir() {
+		return "", nil, fmt.Errorf("cookies path is a directory: %s", sourcePath)
+	}
+
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return "", nil, err
+	}
+	defer source.Close()
+
+	tempFile, err := os.CreateTemp("", "yt-dlp-cookies-*.txt")
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := io.Copy(tempFile, source); err != nil {
+		tempFile.Close()
+		_ = os.Remove(tempFile.Name())
+		return "", nil, err
+	}
+	if err := tempFile.Chmod(0o600); err != nil {
+		tempFile.Close()
+		_ = os.Remove(tempFile.Name())
+		return "", nil, err
+	}
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(tempFile.Name())
+		return "", nil, err
+	}
+
+	return tempFile.Name(), func() {
+		_ = os.Remove(tempFile.Name())
+	}, nil
 }
 
 func buildProfiles(formats []probeFormat, durationSec int) []model.DownloadProfile {

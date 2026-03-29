@@ -91,11 +91,13 @@ jobs:
 
           printf '%s' "${PROD_ENV_B64}" | base64 -d > .env
           mkdir -p .runtime-secrets
-          chmod 700 .runtime-secrets
+          chown 100:101 .runtime-secrets
+          chmod 750 .runtime-secrets
 
           if [ -n "${YOUTUBE_COOKIES_B64:-}" ]; then
             printf '%s' "${YOUTUBE_COOKIES_B64}" | base64 -d > .runtime-secrets/youtube-cookies.txt
-            chmod 600 .runtime-secrets/youtube-cookies.txt
+            chown 100:101 .runtime-secrets/youtube-cookies.txt
+            chmod 640 .runtime-secrets/youtube-cookies.txt
           else
             rm -f .runtime-secrets/youtube-cookies.txt
           fi
