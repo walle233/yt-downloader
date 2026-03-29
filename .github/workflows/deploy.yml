@@ -102,6 +102,6 @@ jobs:
             rm -f .runtime-secrets/youtube-cookies.txt
           fi
 
-          docker compose -f deploy/compose/docker-compose.yml up -d --build --remove-orphans
+          docker compose --env-file .env -f deploy/compose/docker-compose.yml up -d --build --remove-orphans
           docker image prune -f
           EOF
