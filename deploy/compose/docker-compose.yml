@@ -32,8 +32,6 @@ services:
     env_file:
       - ../../.env
     environment:
-      APP_ENV: ${APP_ENV:-development}
-      APP_DOMAIN: ${APP_DOMAIN:-localhost}
       API_PORT: 8080
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
@@ -57,8 +55,6 @@ services:
     env_file:
       - ../../.env
     environment:
-      APP_ENV: ${APP_ENV:-development}
-      APP_DOMAIN: ${APP_DOMAIN:-localhost}
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
