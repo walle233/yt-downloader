@@ -27,9 +27,10 @@ export async function requestJSON<T>(path: string, init?: RequestInit): Promise<
   const parsed = raw ? safeParseJSON(raw) : undefined;
 
   if (!response.ok) {
+    const htmlLike = typeof raw === "string" && raw.trimStart().startsWith("<!DOCTYPE html");
     const message =
       (typeof parsed === "object" && parsed !== null && "error" in parsed && typeof parsed.error === "string" ? parsed.error : "") ||
-      raw ||
+      (htmlLike ? `Service temporarily unavailable (${response.status})` : raw) ||
       `Request failed: ${response.status}`;
     throw new APIError(message, response.status, parsed);
   }

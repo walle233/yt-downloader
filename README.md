@@ -142,20 +142,21 @@ GitHub Secrets 需要配置：
 - `DEPLOY_USER`
 - `DEPLOY_SSH_KEY`
 - `PROD_ENV_FILE`
+- `YOUTUBE_COOKIES_B64`（可选，YouTube cookies 文件的 base64 内容）
 
 服务器首次初始化需要：
 
-- 安装 `git`
 - 安装 Docker Engine 和 Compose plugin
 - 创建 `/opt/yt-downloader`
-- 为服务器配置 GitHub Deploy Key
 - 首次部署前在 GitHub Secrets 中配置完整的生产 `.env` 内容
 
 推荐做法：
 
 - 仓库根目录 `.env` 仅用于本地开发
 - 生产环境变量统一放在 GitHub Secrets 的 `PROD_ENV_FILE`
+- YouTube cookies 文件通过 `YOUTUBE_COOKIES_B64` 下发到服务器 `.runtime-secrets/youtube-cookies.txt`
 - `CLERK_SECRET_KEY`、数据库密码、对象存储密钥等敏感值不要提交到仓库
+- GitHub Actions 会直接把当前提交的源码同步到服务器，不依赖服务器访问 GitHub 仓库
 - Workflow 会在部署时将 `PROD_ENV_FILE` 写入服务器 `/opt/yt-downloader/.env`
 
 ## Cloudflare 上线说明

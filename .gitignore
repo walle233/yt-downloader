@@ -5,10 +5,15 @@ dist/
 .env
 .env.local
 .env.production
+.runtime-secrets/
 tmp/
 data/
 coverage/
 *.log
+*.cookies.txt
 apps/web/dist/
 
 videos/*
+
+
+www.youtube.com_cookies.txt

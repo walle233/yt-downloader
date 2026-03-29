@@ -12,7 +12,7 @@ FROM alpine:3.22
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 py3-pip ffmpeg tzdata \
+RUN apk add --no-cache ffmpeg nodejs python3 py3-pip tzdata \
     && python3 -m pip install --no-cache-dir --break-system-packages --upgrade yt-dlp \
     && addgroup -S app && adduser -S app -G app
 

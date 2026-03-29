@@ -38,9 +38,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-/run/secrets/youtube-cookies.txt}
+      YTDLP_JS_RUNTIMES: ${YTDLP_JS_RUNTIMES:-node}
       DOWNLOAD_TTL_HOURS: ${DOWNLOAD_TTL_HOURS:-24}
       WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    volumes:
+      - ../../.runtime-secrets:/run/secrets:ro
     restart: unless-stopped
 
   worker:
@@ -58,11 +62,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-/run/secrets/youtube-cookies.txt}
+      YTDLP_JS_RUNTIMES: ${YTDLP_JS_RUNTIMES:-node}
       DOWNLOAD_TTL_HOURS: ${DOWNLOAD_TTL_HOURS:-24}
       WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
     volumes:
       - job_data:/data/jobs
+      - ../../.runtime-secrets:/run/secrets:ro
     restart: unless-stopped
 
   postgres:

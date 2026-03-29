@@ -15,10 +15,16 @@ import (
 
 type YTDLP struct {
 	downloadRoot string
+	cookiesFile  string
+	jsRuntimes   string
 }
 
-func New(downloadRoot string) *YTDLP {
-	return &YTDLP{downloadRoot: downloadRoot}
+func New(downloadRoot, cookiesFile, jsRuntimes string) *YTDLP {
+	return &YTDLP{
+		downloadRoot: downloadRoot,
+		cookiesFile:  cookiesFile,
+		jsRuntimes:   jsRuntimes,
+	}
 }
 
 type probeOutput struct {
@@ -41,10 +47,12 @@ type probeFormat struct {
 }
 
 func (y *YTDLP) Probe(ctx context.Context, url string) (model.ProbeResult, error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp", "--dump-single-json", "--no-playlist", url)
-	output, err := cmd.Output()
+	args := append([]string{"--dump-single-json"}, y.baseArgs()...)
+	args = append(args, url)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return model.ProbeResult{}, fmt.Errorf("yt-dlp probe: %w", err)
+		return model.ProbeResult{}, fmt.Errorf("yt-dlp probe: %w; output=%s", err, strings.TrimSpace(string(output)))
 	}
 
 	var data probeOutput
@@ -74,7 +82,7 @@ func (y *YTDLP) Download(ctx context.Context, job model.Download) (model.Downloa
 		return model.DownloadArtifact{}, fmt.Errorf("unsupported download profile: %s", job.ProfileID)
 	}
 
-	args := []string{"--no-playlist", "-o", outputTemplate}
+	args := append(y.baseArgs(), "-o", outputTemplate)
 	switch spec.Kind {
 	case "audio":
 		args = append(args, "-f", "bestaudio")
@@ -140,6 +148,19 @@ func (y *YTDLP) Download(ctx context.Context, job model.Download) (model.Downloa
 		SourceURL:  job.SourceURL,
 		OutputType: spec.Container,
 	}, nil
+}
+
+func (y *YTDLP) baseArgs() []string {
+	args := []string{"--no-playlist"}
+	if y.jsRuntimes != "" {
+		args = append(args, "--js-runtimes", y.jsRuntimes)
+	}
+	if y.cookiesFile != "" {
+		if info, err := os.Stat(y.cookiesFile); err == nil && !info.IsDir() {
+			args = append(args, "--cookies", y.cookiesFile)
+		}
+	}
+	return args
 }
 
 func buildProfiles(formats []probeFormat, durationSec int) []model.DownloadProfile {
