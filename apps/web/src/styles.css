@@ -72,6 +72,26 @@ h1 {
   line-height: 1.7;
 }
 
+.hero-actions {
+  margin-top: 22px;
+}
+
+.auth-actions,
+.auth-user {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.auth-user {
+  color: var(--accent);
+}
+
+.auth-copy {
+  margin-top: 14px;
+}
+
 .hero-meta {
   display: grid;
   gap: 14px;

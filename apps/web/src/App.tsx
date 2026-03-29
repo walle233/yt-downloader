@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import type {
   CreateDownloadResponse,
   DownloadListItem,
@@ -28,7 +29,11 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export default function App() {
+interface AppProps {
+  authEnabled?: boolean;
+}
+
+export default function App({ authEnabled = true }: AppProps) {
   const [url, setURL] = useState("https://www.youtube.com/watch?v=fiVdZ3ZkIjw");
   const [format, setFormat] = useState<OutputFormat>("mp4");
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
@@ -197,6 +202,35 @@ export default function App() {
           <p className="intro">
             输入链接，系统会自动探测、排队、下载、转码并上传到 R2。你只需要等结果，不需要反复刷新。
           </p>
+          <div className="hero-actions">
+            {authEnabled ? (
+              <>
+                <Show when="signed-out">
+                  <div className="auth-actions">
+                    <SignInButton>
+                      <button type="button" className="ghost-button">
+                        登录
+                      </button>
+                    </SignInButton>
+                    <SignUpButton>
+                      <button type="button" className="ghost-button">
+                        注册
+                      </button>
+                    </SignUpButton>
+                  </div>
+                </Show>
+                <Show when="signed-in">
+                  <div className="auth-user">
+                    <span>账号已连接</span>
+                    <UserButton />
+                  </div>
+                </Show>
+              </>
+            ) : (
+              <p className="error-box">未检测到 `VITE_CLERK_PUBLISHABLE_KEY`，Clerk 登录入口暂未启用。</p>
+            )}
+          </div>
+          <p className="muted-copy auth-copy">Clerk 登录已接入，当前下载与额度逻辑暂时仍沿用现有后端规则；支付与套餐后续再接。</p>
         </div>
 
         <div className="hero-meta">
