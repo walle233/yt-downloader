@@ -17,14 +17,16 @@ import (
 
 type YTDLP struct {
 	downloadRoot string
+	proxy        string
 	cookiesFile  string
 	jsRuntimes   string
 	remoteComponents string
 }
 
-func New(downloadRoot, cookiesFile, jsRuntimes, remoteComponents string) *YTDLP {
+func New(downloadRoot, proxy, cookiesFile, jsRuntimes, remoteComponents string) *YTDLP {
 	return &YTDLP{
 		downloadRoot: downloadRoot,
+		proxy:        proxy,
 		cookiesFile:  cookiesFile,
 		jsRuntimes:   jsRuntimes,
 		remoteComponents: remoteComponents,
@@ -172,6 +174,9 @@ func (y *YTDLP) baseArgs() ([]string, func(), error) {
 	args := []string{"--no-playlist"}
 	cleanup := func() {}
 
+	if y.proxy != "" {
+		args = append(args, "--proxy", y.proxy)
+	}
 	if y.jsRuntimes != "" {
 		args = append(args, "--js-runtimes", y.jsRuntimes)
 	}

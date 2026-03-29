@@ -36,6 +36,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      YTDLP_PROXY: ${YTDLP_PROXY:-}
       YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-/run/secrets/youtube-cookies.txt}
       YTDLP_JS_RUNTIMES: ${YTDLP_JS_RUNTIMES:-node}
       YTDLP_REMOTE_COMPONENTS: ${YTDLP_REMOTE_COMPONENTS:-ejs:github}
@@ -59,6 +60,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT:-/data/jobs}
+      YTDLP_PROXY: ${YTDLP_PROXY:-}
       YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-/run/secrets/youtube-cookies.txt}
       YTDLP_JS_RUNTIMES: ${YTDLP_JS_RUNTIMES:-node}
       YTDLP_REMOTE_COMPONENTS: ${YTDLP_REMOTE_COMPONENTS:-ejs:github}

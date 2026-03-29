@@ -70,6 +70,7 @@ cp .env.example .env
 - `REDIS_ADDR`：Redis 地址
 - `R2_*`：对象存储配置
 - `DOWNLOAD_ROOT`：worker 临时工作目录
+- `YTDLP_PROXY`：可选，给 `yt-dlp` 配置住宅代理或其他可用代理出口
 
 ## 本地启动
 
@@ -158,6 +159,7 @@ GitHub Secrets 需要配置：
 - 仓库根目录 `.env` 仅用于本地开发
 - 生产环境变量统一放在 GitHub Secrets 的 `PROD_ENV_FILE`
 - YouTube cookies 文件通过 `YOUTUBE_COOKIES_B64` 下发到服务器 `.runtime-secrets/youtube-cookies.txt`
+- 若接入代理出口，可在 `PROD_ENV_FILE` 中加入 `YTDLP_PROXY`，格式例如 `http://user:pass@host:port`
 - `CLERK_SECRET_KEY`、数据库密码、对象存储密钥等敏感值不要提交到仓库
 - GitHub Actions 会直接把当前提交的源码同步到服务器，不依赖服务器访问 GitHub 仓库
 - Workflow 会在部署时将 `PROD_ENV_FILE` 写入服务器 `/opt/yt-downloader/.env`

@@ -17,6 +17,7 @@ type Config struct {
 	DatabaseURL        string
 	RedisAddr          string
 	DownloadRoot       string
+	YTDLPProxy         string
 	YTDLPCookiesFile   string
 	YTDLPJSRuntimes    string
 	YTDLPRemoteComponents string
@@ -45,6 +46,7 @@ func Load() (Config, error) {
 		DatabaseURL:        getenv("DATABASE_URL", "postgres://ytvideos:ytvideos@postgres:5432/ytvideos?sslmode=disable"),
 		RedisAddr:          getenv("REDIS_ADDR", "redis:6379"),
 		DownloadRoot:       getenv("DOWNLOAD_ROOT", "/data/jobs"),
+		YTDLPProxy:         getenv("YTDLP_PROXY", ""),
 		YTDLPCookiesFile:   getenv("YTDLP_COOKIES_FILE", ""),
 		YTDLPJSRuntimes:    getenv("YTDLP_JS_RUNTIMES", "node"),
 		YTDLPRemoteComponents: getenv("YTDLP_REMOTE_COMPONENTS", "ejs:github"),
