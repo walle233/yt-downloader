@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { Show, SignInButton, UserButton } from "@clerk/react";
 import { trackEvent } from "./lib/analytics";
 import { DownloadPage } from "./pages/DownloadPage";
 import { HomePage } from "./pages/HomePage";
@@ -64,15 +64,6 @@ function AppShell({ authEnabled, children }: { authEnabled: boolean; children: R
                       Sign in
                     </button>
                   </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button
-                      type="button"
-                      onClick={() => trackEvent("sign_up_click", { source: "header" })}
-                      className="rounded-full bg-[#bc0100] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(188,1,0,0.18)] transition hover:scale-[0.98]"
-                    >
-                      Create account
-                    </button>
-                  </SignUpButton>
                 </Show>
                 <Show when="signed-in">
                   <div className="flex items-center gap-3 rounded-full border border-white/70 bg-white/90 px-3 py-2 shadow-sm">
